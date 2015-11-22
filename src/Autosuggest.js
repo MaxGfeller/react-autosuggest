@@ -11,7 +11,11 @@ export default class Autosuggest extends Component {
   static propTypes = {
     value: PropTypes.string,                // Controlled value of the selected suggestion
     defaultValue: PropTypes.string,         // Initial value of the text
-    suggestions: PropTypes.func.isRequired, // Function to get the suggestions
+    suggestions: PropTypes.oneOfType([
+      PropTypes.func,                       // Function to get the suggestions...
+      PropTypes.array                       // ...or an array with the suggestions in it
+    ]),
+    fetchSuggestions: PropTypes.func,       // This is being called to fetch new suggestions but only if suggestions isn't a function
     suggestionRenderer: PropTypes.func,     // Function that renders a given suggestion (must be implemented when suggestions are objects)
     suggestionValue: PropTypes.func,        // Function that maps suggestion object to input value (must be implemented when suggestions are objects)
     showWhen: PropTypes.func,               // Function that determines whether to show suggestions or not
@@ -60,7 +64,10 @@ export default class Autosuggest extends Component {
                                     // See: http://www.w3.org/TR/wai-aria-practices/#autocomplete
     };
     this.isControlledComponent = (typeof props.value !== 'undefined');
-    this.suggestionsFn = debounce(props.suggestions, 100);
+    this.suggestionsFn = null;
+    if (typeof props.suggestions === 'function') {
+      this.suggestionsFn = debounce(props.suggestions, 100);
+    }
     this.onChange = props.inputAttributes.onChange || (() => {});
     this.onFocus = props.inputAttributes.onFocus || (() => {});
     this.onBlur = props.inputAttributes.onBlur || (() => {});
@@ -89,6 +96,10 @@ export default class Autosuggest extends Component {
           !this.justClickedOnSuggestion && !this.justPressedUpDown && !this.justPressedEsc) {
         this.handleValueChange(nextProps.value);
       }
+    }
+
+    if (nextProps.suggestions && typeof nextProps.suggestions == 'object') {
+      this.setSuggestionsState(nextProps.suggestions);
     }
   }
 
@@ -133,7 +144,7 @@ export default class Autosuggest extends Component {
       this.setSuggestionsState(null);
     } else if (this.props.cache && this.cache[cacheKey]) {
       this.setSuggestionsState(this.cache[cacheKey]);
-    } else {
+    } else if (this.suggestionsFn !== null) {
       this.suggestionsFn(input, (error, suggestions) => {
         // If input value changed, suggestions are not relevant anymore.
         if (this.lastSuggestionsInputValue !== input) {
@@ -154,6 +165,8 @@ export default class Autosuggest extends Component {
           this.setSuggestionsState(suggestions);
         }
       });
+    } else {
+      this.props.fetchSuggestions(input);
     }
   }
 
